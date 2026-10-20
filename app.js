@@ -14,7 +14,6 @@ const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const S = {
   key: store.get('jarvis.key'),
   base: store.get('jarvis.base'),
-  handsFree: store.get('jarvis.handsFree') !== 'off',
   phase: 'idle',
   level: 0,
   conversation: false,
@@ -67,15 +66,22 @@ async function api(path, init = {}) {
 
 // --- screen ----------------------------------------------------------------------
 
-const WORDS = { idle: 'Tap to talk', listening: 'Listening…', thinking: 'One moment, sir…', speaking: '' };
-const SUBS = { idle: 'Tap to speak', listening: 'I am listening… tap when done', thinking: 'Thinking…', speaking: 'Speaking · tap to interrupt' };
+const WORDS = { idle: 'Tap the core to wake me, sir.', paused: "Paused. I'm not listening.", listening: 'Listening…', thinking: 'One moment, sir…', speaking: '' };
+const BAR = {
+  idle: ['WAKE JARVIS', 'Tap here or the core'],
+  paused: ['PAUSED', 'Tap to start listening again'],
+  listening: ['LISTENING', 'Just talk, sir · tap to pause'],
+  thinking: ['THINKING', 'One moment…'],
+  speaking: ['SPEAKING', 'Tap to interrupt'],
+};
 
 function setPhase(phase, text) {
   S.phase = phase;
   $('app').dataset.phase = phase;
   $('status').textContent = text ?? WORDS[phase];
-  $('talkSub').textContent = SUBS[phase];
-  $('endBtn').hidden = !S.conversation;
+  const [title, sub] = BAR[phase === 'idle' && S.paused ? 'paused' : phase];
+  $('talkTitle').textContent = title;
+  $('talkSub').textContent = sub;
   if (phase !== 'listening' && phase !== 'speaking') setLevel(0);
 }
 
@@ -107,6 +113,7 @@ function addLine(who, text) {
   item.append(ico, body);
   $('log').prepend(item);
   while ($('log').children.length > 20) $('log').lastChild.remove();
+  return item;
 }
 
 function showView() {
@@ -271,18 +278,6 @@ function audioSession(type) {
   try { if (navigator.audioSession) navigator.audioSession.type = type; } catch { /* older iOS */ }
 }
 
-function chime() {
-  const t = S.ctx.currentTime, o = S.ctx.createOscillator(), g = S.ctx.createGain();
-  o.frequency.setValueAtTime(880, t);
-  o.frequency.setValueAtTime(1320, t + 0.07);
-  g.gain.setValueAtTime(0.0001, t);
-  g.gain.exponentialRampToValueAtTime(0.1, t + 0.01);
-  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
-  o.connect(g).connect(S.ctx.destination);
-  o.start(t);
-  o.stop(t + 0.18);
-}
-
 async function keepAwake(on) {
   try {
     if (on && !S.wake && navigator.wakeLock) S.wake = await navigator.wakeLock.request('screen');
@@ -304,7 +299,6 @@ async function record() {
   src.connect(node);
   node.connect(mute).connect(ctx.destination);
   const frameMs = (1024 / ctx.sampleRate) * 1000;
-  const waitMs = S.handsFree ? 9000 : 12000;
 
   return new Promise((resolve) => {
     const pre = [], chunks = [];
@@ -341,9 +335,9 @@ async function record() {
           started = true;
           startedAt = lastLoud = t;
           chunks.push(...pre);
+          api('/warm', { method: 'POST' }).catch(() => {}); // wake Claude while he's still talking
         } else {
           noise = noise * 0.97 + rms * 0.03;
-          if (t > waitMs) finish(false);
         }
         return;
       }
@@ -425,21 +419,24 @@ function phoneVoice(text) {
 
 // --- a conversation ----------------------------------------------------------------
 
-// Sends what he said and speaks the reply as it arrives, a sentence or two at a time, so Jarvis starts talking
-// while the rest is still being prepared. Returns 'ok', 'empty', 'end' or 'error'.
-async function exchange(init) {
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Sends what he said (or asks for the greeting) and speaks the reply as it arrives, a sentence or two at a time,
+// so Jarvis starts talking while the rest is still being prepared. Returns 'ok', 'empty', 'retry' or 'error'.
+async function exchange(init, greeting = false) {
   S.interrupted = false;
-  let turn;
+  let turn, said = null;
   try {
     const r = await api('/turn', { method: 'POST', ...init });
     turn = await r.json();
     if (!r.ok) throw new Error(turn.error);
   } catch (e) {
-    stopConversation(problem(e));
-    return 'error';
+    return trouble(e);
   }
-  if (!turn.heard) return 'empty';
-  addLine('you', turn.heard);
+  if (!greeting) {
+    if (!turn.heard) return 'empty';
+    said = addLine('you', turn.heard);
+  }
 
   const parts = [...turn.parts];
   let failed = null, wake = null, shown = false;
@@ -458,42 +455,48 @@ async function exchange(init) {
 
   for (let i = 0; !S.interrupted;) {
     if (i < parts.length) { await speakPart(parts[i++]); continue; }
-    if (failed) { stopConversation(problem(failed)); return 'error'; }
+    if (failed) return trouble(failed);
     if (turn.status === 'done') break;
     setPhase('thinking', `${turn.step}…`);
     await new Promise((resolve) => { wake = resolve; });
     wake = null;
   }
-  if (S.interrupted) return 'ok'; // he tapped to cut Jarvis short
+  if (S.interrupted) return 'ok'; // he cut Jarvis short
+  if (!turn.reply) said?.remove(); // it wasn't meant for Jarvis (the TV, someone else): leave it out of the feed
   refreshStatus();
-  return turn.end ? 'end' : 'ok';
+  return 'ok';
 }
 
-async function converse() {
-  let misses = 0;
-  while (S.conversation) {
+// A problem mid-conversation. Lost pairing stops everything; anything else (say the Mac is briefly unreachable)
+// is shown for a moment, then Jarvis carries on listening.
+async function trouble(e) {
+  const msg = problem(e);
+  if (e instanceof Unpaired || !S.conversation) { stopConversation(msg); return 'error'; }
+  setPhase('thinking', msg);
+  await sleep(4000);
+  return 'retry';
+}
+
+// Jarvis's side of the call: greet him (the first time the app wakes), then listen and answer, over and over,
+// until he pauses it or leaves the app. No tapping needed in between.
+async function converse(greet) {
+  const me = (S.loop = (S.loop || 0) + 1);
+  S.conversation = true;
+  S.paused = false;
+  keepAwake(true);
+  if (greet && (await exchange({ body: JSON.stringify({ greet: true }), headers: { 'Content-Type': 'application/json' } }, true)) === 'error') return;
+  while (S.conversation && S.loop === me) {
     setPhase('listening');
     let chunks;
     try {
-      chime();
       chunks = await record();
     } catch (e) {
       return stopConversation(problem(e));
     }
-    if (!S.conversation) return;
-    let outcome = 'empty';
-    if (chunks) {
-      setPhase('thinking');
-      outcome = await exchange({ body: wav(chunks, S.ctx.sampleRate), headers: { 'Content-Type': 'audio/wav' } });
-    }
-    if (outcome === 'error') return;
-    if (outcome === 'end') return stopConversation('Tap to talk');
-    if (outcome === 'empty') {
-      if (++misses >= 2 || !S.handsFree) return stopConversation('Standing by, sir. Tap when you need me.');
-      continue;
-    }
-    misses = 0;
-    if (!S.handsFree) return stopConversation('Tap to talk');
+    if (!S.conversation || S.loop !== me) return;
+    if (!chunks) continue;
+    setPhase('thinking');
+    if ((await exchange({ body: wav(chunks, S.ctx.sampleRate), headers: { 'Content-Type': 'audio/wav' } })) === 'error') return;
   }
 }
 
@@ -503,36 +506,44 @@ function stopConversation(text) {
   S.rec?.cancel();
   S.playing?.stop();
   keepAwake(false);
-  setPhase('idle', text || WORDS.idle);
+  setPhase('idle', text || (S.paused ? WORDS.paused : WORDS.idle));
 }
 
-function onTalk() {
+function wake() {
   unlockAudio();
-  if (S.phase === 'listening') return S.rec?.stop();     // done talking: send it now
-  if (S.phase === 'speaking') {                            // cut Jarvis short; hands-free carries on listening
-    S.interrupted = true;
-    return S.playing?.stop();
-  }
-  if (S.phase === 'thinking') return;
   if (!navigator.mediaDevices?.getUserMedia) return setPhase('idle', "This browser can't use the microphone. Type instead.");
-  S.conversation = true;
-  keepAwake(true);
-  api('/warm', { method: 'POST' }).catch(() => {}); // wake Claude while he's still talking
-  converse();
+  const greet = !S.greeted;
+  S.greeted = true;
+  converse(greet);
+}
+
+function interrupt() {
+  S.interrupted = true;
+  S.playing?.stop();
 }
 
 async function sendText(text) {
   if (!text || S.phase === 'thinking') return;
   unlockAudio();
+  const listening = S.conversation;
   stopConversation('');
   setPhase('thinking');
-  const outcome = await exchange({ body: JSON.stringify({ text }), headers: { 'Content-Type': 'application/json' } });
-  if (outcome !== 'error') setPhase('idle');
+  if ((await exchange({ body: JSON.stringify({ text }), headers: { 'Content-Type': 'application/json' } })) === 'error') return;
+  if (listening) converse(false);
+  else setPhase('idle');
 }
 
-$('core').addEventListener('click', onTalk);
-$('talkBtn').addEventListener('click', onTalk);
-$('endBtn').addEventListener('click', () => stopConversation('Standing by, sir.'));
+$('core').addEventListener('click', () => {
+  if (!S.conversation) return wake();
+  if (S.phase === 'speaking') interrupt();
+});
+
+$('talkBtn').addEventListener('click', () => {
+  if (!S.conversation) return wake();
+  if (S.phase === 'speaking') return interrupt();
+  S.paused = true;
+  stopConversation();
+});
 
 $('typeBtn').addEventListener('click', () => {
   $('typeForm').hidden = !$('typeForm').hidden;
@@ -552,10 +563,15 @@ document.querySelectorAll('.cmd').forEach((b) => b.addEventListener('click', () 
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
     globe.stop();
-    if (S.conversation || S.phase === 'speaking') stopConversation('Tap to talk');
+    S.resume = S.conversation;
+    if (S.conversation || S.phase === 'speaking') stopConversation();
   } else {
     globe.start();
     if (S.key) refreshStatus();
+    if (S.resume && S.ctx) { // back in the app: carry on listening, if iPhone allows it without a tap
+      S.resume = false;
+      S.ctx.resume().then(() => { if (S.ctx.state === 'running' && !S.conversation) converse(false); }).catch(() => {});
+    }
   }
 });
 
@@ -577,7 +593,7 @@ $('pairForm').addEventListener('submit', async (e) => {
     msg.textContent = '';
     showView();
     globe.size();
-    setPhase('idle', 'Paired. Tap to talk.');
+    setPhase('idle', 'Paired. Tap the core to wake me, sir.');
   } catch (err) {
     msg.textContent = err instanceof Offline
       ? "I can't reach your Mac. Is it on, with the Jarvis app service running?"
@@ -586,7 +602,6 @@ $('pairForm').addEventListener('submit', async (e) => {
 });
 
 $('settingsBtn').addEventListener('click', async () => {
-  $('handsFree').checked = S.handsFree;
   $('settingsMsg').textContent = '';
   $('settings').showModal();
   const sel = $('voice');
@@ -597,11 +612,6 @@ $('settingsBtn').addEventListener('click', async () => {
     sel.replaceChildren(new Option('Unavailable'));
     $('settingsMsg').textContent = problem(e);
   }
-});
-
-$('handsFree').addEventListener('change', (e) => {
-  S.handsFree = e.target.checked;
-  store.set('jarvis.handsFree', S.handsFree ? 'on' : 'off');
 });
 
 $('voice').addEventListener('change', async (e) => {

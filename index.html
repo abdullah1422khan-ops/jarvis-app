@@ -16,7 +16,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&family=Rajdhani:wght@500;600;700&display=swap">
-<link rel="stylesheet" href="style.css?v=5">
+<link rel="stylesheet" href="style.css?v=6">
 </head>
 <body>
 <div id="app" data-phase="idle">
@@ -58,7 +58,7 @@
           <span class="core-ver">v1.0</span>
         </button>
       </div>
-      <p id="status" aria-live="polite">Tap to talk</p>
+      <p id="status" aria-live="polite">Tap the core to wake me, sir.</p>
     </section>
 
     <section class="panel overview">
@@ -103,7 +103,6 @@
   </main>
 
   <footer id="talkbar" class="talkbar" hidden>
-    <button id="endBtn" class="btn small" type="button" hidden>END CONVERSATION</button>
     <form id="typeForm" hidden>
       <input id="typeInput" placeholder="Type to Jarvis…" enterkeyhint="send" autocomplete="off" aria-label="Message to Jarvis">
       <button type="submit" class="btn solid">SEND</button>
@@ -111,7 +110,7 @@
     <div class="talkrow">
       <div class="wave" id="waveL" aria-hidden="true"></div>
       <button id="talkBtn" class="talk" type="button">
-        <b>TALK TO JARVIS</b><small id="talkSub">Tap to speak</small>
+        <b id="talkTitle">WAKE JARVIS</b><small id="talkSub">Tap here or the core</small>
       </button>
       <div class="wave" id="waveR" aria-hidden="true"></div>
       <button id="typeBtn" class="icon" type="button" aria-label="Type instead">
@@ -124,8 +123,6 @@
 <dialog id="settings">
   <form method="dialog" class="sheet">
     <h2>SETTINGS</h2>
-    <label class="row"><span>Hands-free conversation<small>Listens again after each reply</small></span>
-      <input id="handsFree" type="checkbox" role="switch"></label>
     <label class="row"><span>Jarvis's voice<small>British voices on your Mac</small></span>
       <select id="voice"><option>Loading…</option></select></label>
     <button id="resetBtn" class="btn" type="button">START A FRESH CONVERSATION</button>
@@ -135,7 +132,7 @@
   </form>
 </dialog>
 
-<script src="config.js?v=5"></script>
-<script src="app.js?v=5"></script>
+<script src="config.js?v=6"></script>
+<script src="app.js?v=6"></script>
 </body>
 </html>
