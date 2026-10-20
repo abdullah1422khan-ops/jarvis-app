@@ -210,7 +210,7 @@ svg { display: block; }
   margin: 4px 0 0;
   min-height: 1.4em;
   font: 600 17px/1.3 var(--hud);
-  letter-spacing: 0.06em;
+  letter-spacing: 0.02em;
   color: var(--cyan);
   text-align: center;
 }
@@ -340,7 +340,7 @@ svg { display: block; }
 }
 .talk:active { transform: scale(0.98); }
 .talk b { display: block; font: 700 17px/1 var(--display); letter-spacing: 0.16em; color: var(--bright); white-space: nowrap; }
-.talk small { display: block; margin-top: 6px; font: 600 13px/1 var(--hud); letter-spacing: 0.06em; color: var(--text); }
+.talk small { display: block; margin-top: 6px; font: 600 13px/1 var(--hud); letter-spacing: 0.02em; color: var(--text); }
 
 [data-phase="listening"] .talk,
 [data-phase="speaking"] .talk { box-shadow: 0 0 calc(22px + var(--level) * 30px) rgba(63, 208, 255, 0.6), inset 0 0 16px rgba(63, 208, 255, 0.35); }
