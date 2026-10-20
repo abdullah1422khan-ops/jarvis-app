@@ -349,7 +349,7 @@ async function record() {
       }
       chunks.push(data);
       if (rms > threshold) lastLoud = t;
-      if (t - lastLoud > 1200 || t - startedAt > 30000) finish(true);
+      if (t - lastLoud > 1000 || t - startedAt > 30000) finish(true);
     };
   });
 }
@@ -375,13 +375,14 @@ function wav(chunks, rate) {
   return new Blob([v], { type: 'audio/wav' });
 }
 
-async function speak(turn) {
+// Plays one piece of Jarvis's reply (base64 audio from the Mac).
+async function speakPart(part) {
   setPhase('speaking');
   audioSession('playback');
   try {
-    if (!turn.audio) throw new Error('no audio');
-    const buf = await (await api(`/audio/${turn.id}`)).arrayBuffer();
-    const audio = await S.ctx.decodeAudioData(buf);
+    if (!part.audio) throw new Error('no audio');
+    const bytes = Uint8Array.from(atob(part.audio), (c) => c.charCodeAt(0));
+    const audio = await S.ctx.decodeAudioData(bytes.buffer);
     await new Promise((resolve) => {
       const src = S.ctx.createBufferSource(), an = S.ctx.createAnalyser(), wave = new Float32Array(512);
       an.fftSize = 512;
@@ -402,7 +403,7 @@ async function speak(turn) {
       pulse();
     });
   } catch {
-    await phoneVoice(turn.reply);
+    await phoneVoice(part.text);
   }
 }
 
@@ -424,27 +425,46 @@ function phoneVoice(text) {
 
 // --- a conversation ----------------------------------------------------------------
 
-// Sends what he said and speaks the reply. Returns 'ok', 'empty', 'end' or 'error'.
+// Sends what he said and speaks the reply as it arrives, a sentence or two at a time, so Jarvis starts talking
+// while the rest is still being prepared. Returns 'ok', 'empty', 'end' or 'error'.
 async function exchange(init) {
+  S.interrupted = false;
   let turn;
   try {
     const r = await api('/turn', { method: 'POST', ...init });
     turn = await r.json();
     if (!r.ok) throw new Error(turn.error);
-    if (!turn.heard) return 'empty';
-    addLine('you', turn.heard);
-    while (turn.status !== 'done') {
-      setPhase('thinking', `${turn.step}…`);
-      const p = await api(`/turn/${turn.id}?wait=1`);
-      if (!p.ok) throw new Error('expired');
-      turn = await p.json();
-    }
   } catch (e) {
     stopConversation(problem(e));
     return 'error';
   }
-  addLine('jarvis', turn.reply);
-  await speak(turn);
+  if (!turn.heard) return 'empty';
+  addLine('you', turn.heard);
+
+  const parts = [...turn.parts];
+  let failed = null, wake = null, shown = false;
+  const show = () => { if (turn.reply && !shown) { addLine('jarvis', turn.reply); shown = true; } };
+  show();
+  (async () => {
+    while (turn.status !== 'done' && !S.interrupted) {
+      const r = await api(`/turn/${turn.id}?have=${turn.have}`);
+      if (!r.ok) throw new Error('expired');
+      turn = await r.json();
+      parts.push(...turn.parts);
+      show();
+      wake?.();
+    }
+  })().catch((e) => { failed = e; wake?.(); });
+
+  for (let i = 0; !S.interrupted;) {
+    if (i < parts.length) { await speakPart(parts[i++]); continue; }
+    if (failed) { stopConversation(problem(failed)); return 'error'; }
+    if (turn.status === 'done') break;
+    setPhase('thinking', `${turn.step}…`);
+    await new Promise((resolve) => { wake = resolve; });
+    wake = null;
+  }
+  if (S.interrupted) return 'ok'; // he tapped to cut Jarvis short
   refreshStatus();
   return turn.end ? 'end' : 'ok';
 }
@@ -479,6 +499,7 @@ async function converse() {
 
 function stopConversation(text) {
   S.conversation = false;
+  S.interrupted = true;
   S.rec?.cancel();
   S.playing?.stop();
   keepAwake(false);
@@ -488,11 +509,15 @@ function stopConversation(text) {
 function onTalk() {
   unlockAudio();
   if (S.phase === 'listening') return S.rec?.stop();     // done talking: send it now
-  if (S.phase === 'speaking') return S.playing?.stop();   // interrupt him; hands-free carries on listening
+  if (S.phase === 'speaking') {                            // cut Jarvis short; hands-free carries on listening
+    S.interrupted = true;
+    return S.playing?.stop();
+  }
   if (S.phase === 'thinking') return;
   if (!navigator.mediaDevices?.getUserMedia) return setPhase('idle', "This browser can't use the microphone. Type instead.");
   S.conversation = true;
   keepAwake(true);
+  api('/warm', { method: 'POST' }).catch(() => {}); // wake Claude while he's still talking
   converse();
 }
 
