@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Jarvis</title>
+<meta name="description" content="Jarvis command centre.">
+<meta name="theme-color" content="#020814">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Jarvis">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&family=Rajdhani:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="style.css?v=2">
+</head>
+<body>
+<div id="app" data-phase="idle">
+  <header class="top">
+    <div class="logo">
+      <span class="logo-mark" aria-hidden="true"></span>
+      <div><b>JARVIS</b><small>COMMAND CENTER</small></div>
+    </div>
+    <div class="clock"><small id="date"></small><b id="time"></b></div>
+    <button id="settingsBtn" class="icon" type="button" aria-label="Settings" hidden>
+      <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M19.4 13a7.5 7.5 0 0 0 0-2l2-1.6-2-3.4-2.4 1a7.6 7.6 0 0 0-1.7-1L14.9 3.5h-4l-.4 2.5a7.6 7.6 0 0 0-1.7 1l-2.4-1-2 3.4 2.1 1.6a7.5 7.5 0 0 0 0 2l-2 1.6 2 3.4 2.4-1a7.6 7.6 0 0 0 1.7 1l.4 2.5h4l.4-2.5a7.6 7.6 0 0 0 1.7-1l2.4 1 2-3.4zM12.9 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z" transform="translate(-0.9 0)"/></svg>
+    </button>
+  </header>
+
+  <div class="chips">
+    <span id="sysChip" class="chip" data-state="checking"><i class="dot"></i>SYSTEM STATUS <b id="sysText">CHECKING</b></span>
+    <span class="chip"><i class="dot cyan"></i>NO PER-MINUTE CHARGES</span>
+  </div>
+
+  <section id="pairView" class="panel pair" hidden>
+    <h2>SECURE PAIRING</h2>
+    <p>On your Mac, open Terminal and run:</p>
+    <code>python3 ~/Jarvis/web/jarvis_web.py pair</code>
+    <p>Then enter the six-digit code. You only do this once per phone.</p>
+    <form id="pairForm" autocomplete="off">
+      <input id="pairCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" aria-label="Pairing code">
+      <button type="submit" class="btn solid">PAIR</button>
+    </form>
+    <p id="pairMsg" class="note" aria-live="polite"></p>
+  </section>
+
+  <main id="talkView" class="grid" hidden>
+    <section class="panel core-panel">
+      <div class="core-wrap">
+        <canvas id="globe" aria-hidden="true"></canvas>
+        <button id="core" type="button" aria-label="Talk to Jarvis">
+          <span class="core-title">JARVIS</span>
+          <span class="core-sub">AI CORE</span>
+          <span class="core-ver">v1.0</span>
+        </button>
+      </div>
+      <p id="status" aria-live="polite">Tap to talk</p>
+    </section>
+
+    <section class="panel overview">
+      <h2>AI CORE OVERVIEW</h2>
+      <div class="tiles">
+        <div class="tile"><i class="ico c-cyan"><svg viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0-6 6v1a4 4 0 0 0 0 8h1m5-15a6 6 0 0 1 6 6v1a4 4 0 0 1 0 8h-1M9 21h6M12 12v9"/></svg></i>
+          <span>AI Core<small id="stBrain">Claude</small></span></div>
+        <div class="tile"><i class="ico c-blue"><svg viewBox="0 0 24 24"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm6-3a6 6 0 0 1-12 0m6 6v3"/></svg></i>
+          <span>Voice<small id="stVoice">—</small></span></div>
+        <div class="tile"><i class="ico c-green"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H4zM8 20h8M12 16v4"/></svg></i>
+          <span>Mac Link<small id="stMac">—</small></span></div>
+        <div class="tile"><i class="ico c-purple"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v6c0 1.7 3.1 3 7 3s7-1.3 7-3V6M5 12v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6"/></svg></i>
+          <span>Memory<small id="stMemory">—</small></span></div>
+      </div>
+    </section>
+
+    <section class="panel feed">
+      <h2>LIVE FEED <span class="badge">LIVE</span></h2>
+      <div id="log" aria-live="polite"><p class="empty">Awaiting your instructions, sir.</p></div>
+    </section>
+
+    <section class="panel commands">
+      <h2>QUICK COMMANDS</h2>
+      <div class="cmds">
+        <button class="cmd" type="button" data-say="Give me my business briefing."><i>◆</i>Business briefing</button>
+        <button class="cmd" type="button" data-say="How are sales today across both stores?"><i>◆</i>Sales today</button>
+        <button class="cmd" type="button" data-say="Anything important in my email?"><i>◆</i>Check email</button>
+        <button class="cmd" type="button" data-say="What's on my calendar today?"><i>◆</i>Today's calendar</button>
+        <button class="cmd" type="button" data-say="What's the weather like today?"><i>◆</i>Weather</button>
+        <button class="cmd" type="button" data-say="Play some music I'd like."><i>◆</i>Play music</button>
+      </div>
+    </section>
+
+    <section class="panel monitor">
+      <h2>MAC MONITOR</h2>
+      <div class="gauges">
+        <div class="gauge" id="gBattery"><svg viewBox="0 0 44 44"><circle cx="22" cy="22" r="18"/><circle class="fill" cx="22" cy="22" r="18"/></svg><b>—</b><small>BATTERY</small></div>
+        <div class="gauge" id="gCpu"><svg viewBox="0 0 44 44"><circle cx="22" cy="22" r="18"/><circle class="fill" cx="22" cy="22" r="18"/></svg><b>—</b><small>CPU</small></div>
+        <div class="gauge" id="gDisk"><svg viewBox="0 0 44 44"><circle cx="22" cy="22" r="18"/><circle class="fill" cx="22" cy="22" r="18"/></svg><b>—</b><small>DISK</small></div>
+      </div>
+    </section>
+  </main>
+
+  <footer id="talkbar" class="talkbar" hidden>
+    <button id="endBtn" class="btn small" type="button" hidden>END CONVERSATION</button>
+    <form id="typeForm" hidden>
+      <input id="typeInput" placeholder="Type to Jarvis…" enterkeyhint="send" autocomplete="off" aria-label="Message to Jarvis">
+      <button type="submit" class="btn solid">SEND</button>
+    </form>
+    <div class="talkrow">
+      <div class="wave" id="waveL" aria-hidden="true"></div>
+      <button id="talkBtn" class="talk" type="button">
+        <b>TALK TO JARVIS</b><small id="talkSub">Tap to speak</small>
+      </button>
+      <div class="wave" id="waveR" aria-hidden="true"></div>
+      <button id="typeBtn" class="icon" type="button" aria-label="Type instead">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.6" d="M3 6h18v12H3zM6 9h1m3 0h1m3 0h1m3 0h1M6 12h1m3 0h1m3 0h1m3 0h1M8 15h8"/></svg>
+      </button>
+    </div>
+  </footer>
+</div>
+
+<dialog id="settings">
+  <form method="dialog" class="sheet">
+    <h2>SETTINGS</h2>
+    <label class="row"><span>Hands-free conversation<small>Listens again after each reply</small></span>
+      <input id="handsFree" type="checkbox" role="switch"></label>
+    <label class="row"><span>Jarvis's voice<small>British voices on your Mac</small></span>
+      <select id="voice"><option>Loading…</option></select></label>
+    <button id="resetBtn" class="btn" type="button">START A FRESH CONVERSATION</button>
+    <button id="forgetBtn" class="btn danger" type="button">UNPAIR THIS PHONE</button>
+    <p id="settingsMsg" class="note" aria-live="polite"></p>
+    <button class="btn solid" value="close">DONE</button>
+  </form>
+</dialog>
+
+<script src="config.js?v=2"></script>
+<script src="app.js?v=2"></script>
+</body>
+</html>
