@@ -61,7 +61,7 @@ svg { display: block; }
 
 .logo { display: flex; align-items: center; gap: 10px; margin-right: auto; }
 .logo b { display: block; font: 700 18px/1 var(--display); letter-spacing: 0.28em; color: var(--text); }
-.logo small { display: block; margin-top: 3px; font: 600 9px/1 var(--hud); letter-spacing: 0.3em; color: var(--cyan); }
+.logo small { display: block; margin-top: 3px; font: 600 11px/1 var(--hud); letter-spacing: 0.14em; color: var(--cyan); }
 
 .logo-mark {
   width: 34px;
@@ -157,7 +157,7 @@ svg { display: block; }
   background: rgba(54, 226, 160, 0.14);
   border: 1px solid rgba(54, 226, 160, 0.4);
   color: var(--green);
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.14em;
 }
 
