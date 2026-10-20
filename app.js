@@ -115,8 +115,9 @@ function showView() {
   $('talkView').hidden = !paired;
   $('talkbar').hidden = !paired;
   $('settingsBtn').hidden = !paired;
-  if (paired) refreshStatus();
-  else $('pairCode').focus();
+  if (paired) return refreshStatus();
+  $('pairCode').focus();
+  api('/health').then(() => setSystem('limited', 'AWAITING PAIRING')).catch(() => setSystem('offline', 'MAC OFFLINE'));
 }
 
 function problem(e) {
