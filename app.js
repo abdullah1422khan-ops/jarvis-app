@@ -36,7 +36,10 @@ const MAC_URL = new RegExp(CFG.macPattern || '^https://[a-z0-9]+(-[a-z0-9]+)+\\.
 
 async function findMac(fresh) {
   if (devMac) return devMac;
-  if (!fresh && S.base && MAC_URL.test(S.base)) return S.base;
+  const known = S.base && MAC_URL.test(S.base);
+  // GitHub allows 60 lookups an hour per network, so while the Mac is unreachable, look again at most every 15 s.
+  if (known && (!fresh || Date.now() - (S.lookedUp || 0) < 15000)) return S.base;
+  S.lookedUp = Date.now();
   const r = await fetch(`https://api.github.com/gists/${CFG.gistId}`, { cache: 'no-store' });
   if (!r.ok) throw new Offline();
   const url = ((await r.json()).files?.[CFG.gistFile]?.content || '').trim();
@@ -179,6 +182,8 @@ async function refreshStatus() {
     setSystem('offline', 'MAC OFFLINE');
     $('stMac').textContent = 'Unreachable';
     $('stMac').className = 'bad';
+    clearTimeout(S.statusRetry); // check again soon, so it shows online as soon as the Mac is back
+    S.statusRetry = setTimeout(() => { if (S.key && !document.hidden) refreshStatus(); }, 15000);
   }
 }
 
@@ -434,6 +439,7 @@ async function exchange(init, greeting = false) {
   } catch (e) {
     return trouble(e);
   }
+  S.backoff = 0;
   if (!greeting) {
     if (!turn.heard) return 'empty';
     said = addLine('you', turn.heard);
@@ -473,8 +479,10 @@ async function exchange(init, greeting = false) {
 async function trouble(e) {
   const msg = problem(e);
   if (e instanceof Unpaired || !S.conversation) { stopConversation(msg); return 'error'; }
-  setPhase('thinking', msg);
-  await sleep(4000);
+  // The Mac's tunnel can drop for a minute while it gets a new address: keep trying, waiting a little longer each time.
+  S.backoff = Math.min(30000, (S.backoff || 2000) * 2);
+  setPhase('thinking', e instanceof Offline ? 'Reconnecting to your Mac…' : msg);
+  await sleep(S.backoff);
   return 'retry';
 }
 
