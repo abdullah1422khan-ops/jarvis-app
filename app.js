@@ -30,7 +30,8 @@ class Offline extends Error {}
 // For testing on the Mac: http://localhost:8000/?mac=http://127.0.0.1:8788
 const devMac = ['localhost', '127.0.0.1'].includes(location.hostname) && new URLSearchParams(location.search).get('mac');
 // A real tunnel name is hyphenated random words; never send the key to anything else (like api.trycloudflare.com).
-const MAC_URL = new RegExp(CFG.macPattern || '^https://[a-z0-9]+(-[a-z0-9]+)+\\.trycloudflare\\.com$');
+const MAC_URL = new RegExp(CFG.macPattern ||
+  '^https://([a-z0-9]+(-[a-z0-9]+)+\\.trycloudflare\\.com|[a-z0-9-]+\\.[a-z0-9-]+\\.ts\\.net)$');
 
 // --- talking to the Mac ------------------------------------------------------
 
